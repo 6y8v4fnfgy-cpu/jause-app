@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#166534">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Jause</title>
+<style>
+:root{--g:#166534;--bg:#f4f7f5;--card:#fff;--text:#17201a;--muted:#6b7280;--line:#e5e7eb;--red:#b91c1c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{background:var(--g);color:#fff;padding:18px 16px calc(18px + env(safe-area-inset-top));position:sticky;top:0;z-index:5}
+header h1{margin:0;font-size:25px}header p{margin:3px 0 0;opacity:.85;font-size:13px}
+main{max-width:720px;margin:auto;padding:14px 14px 95px}.card{background:var(--card);border-radius:18px;padding:15px;margin:0 0 14px;box-shadow:0 2px 12px #0000000b}
+h2{font-size:18px;margin:0 0 12px}label{display:block;font-size:12px;font-weight:800;margin:9px 0 5px;color:#374151}
+input,select,button{font:inherit;border-radius:12px;padding:13px;width:100%}
+input,select{border:1px solid var(--line);background:#fff}button{border:0;background:var(--g);color:#fff;font-weight:800;cursor:pointer}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.total{text-align:center;font-size:34px;font-weight:900;margin:5px 0}
+.person{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}.person:last-child{border-bottom:0}
+.person button{width:auto;padding:7px 9px;background:#e5e7eb;color:#111827;font-size:12px}
+.item{display:grid;grid-template-columns:1fr auto;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}.item:last-child{border:0}
+.price{font-weight:900;text-align:right}.small{font-size:12px;color:var(--muted)}
+.actions{display:flex;gap:8px;margin-top:10px}.actions button{flex:1}.secondary{background:#374151}.danger{background:var(--red)}
+.tabs{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;z-index:10;padding-bottom:env(safe-area-inset-bottom)}
+.tabs button{border-radius:0;background:#fff;color:#4b5563;padding:13px 4px;font-size:12px}.tabs button.active{color:var(--g);font-weight:900}
+.hidden{display:none!important}.empty{text-align:center;color:var(--muted);padding:18px}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#dcfce7;color:#166534;font-size:11px;font-weight:800}
+</style>
+</head>
+<body>
+<header><h1>🥪 Jause</h1><p>Eintragen · zusammenrechnen · abhaken</p></header>
+<main>
+<section id="home">
+ <div class="card">
+  <div class="grid">
+   <div><label>Datum</label><input id="date" type="date"></div>
+   <div><label>Ansicht</label><select id="range"><option value="day">Heute</option><option value="week">Woche</option></select></div>
+  </div>
+ </div>
+ <div class="card">
+  <h2>➕ Jause eintragen</h2>
+  <label>Wer?</label><select id="person"></select>
+  <div class="grid">
+   <div><label>Artikel</label><input id="article" placeholder="z. B. Wurstsemmel"></div>
+   <div><label>Preis (€)</label><input id="price" inputmode="decimal" placeholder="2,80"></div>
+  </div>
+  <button id="add">Hinzufügen</button>
+ </div>
+ <div class="card">
+  <h2>💰 Gesamt</h2><div id="total" class="total">0,00 €</div>
+  <div class="small" id="sub"></div>
+ </div>
+ <div class="card"><h2>👥 Personen</h2><div id="totals"></div></div>
+ <div class="card"><h2>📋 Einträge</h2><div id="entries"></div></div>
+</section>
+
+<section id="history" class="hidden">
+ <div class="card"><h2>📅 Vergangene Tage</h2><div id="days"></div></div>
+</section>
+
+<section id="settings" class="hidden">
+ <div class="card"><h2>👥 Mitarbeiter</h2><div id="names"></div></div>
+ <div class="card"><h2>⚙️ Daten</h2><div class="actions"><button class="secondary" id="export">Backup</button><button class="danger" id="reset">Alles löschen</button></div></div>
+</section>
+</main>
+
+<nav class="tabs">
+ <button data-tab="home" class="active">🏠<br>Heute</button>
+ <button data-tab="history">📅<br>Tage</button>
+ <button data-tab="settings">⚙️<br>Einstellungen</button>
+</nav>
+
+<script>
+const PEOPLE=["Patrick","Arek","Wolfgang","Lukas","Martin","Michi","Wolki","Werner","Klausi","Marcel"];
+const KEY="jause_v2";
+const $=id=>document.getElementById(id);
+const date=$("date"), person=$("person"), article=$("article"), price=$("price");
+const money=n=>n.toLocaleString("de-AT",{style:"currency",currency:"EUR"});
+let store=JSON.parse(localStorage.getItem(KEY)||"{}");
+const isoToday=new Date().toLocaleDateString("sv-SE");
+date.value=isoToday;
+
+PEOPLE.forEach(p=>person.add(new Option(p,p)));
+
+function save(){localStorage.setItem(KEY,JSON.stringify(store))}
+function data(d=date.value){return store[d]||[]}
+function parsePrice(s){return Number(String(s).replace(",",".").replace(/[^0-9.]/g,""))}
+function add(){
+ const a=article.value.trim(), p=parsePrice(price.value);
+ if(!a||!Number.isFinite(p)){alert("Bitte Artikel und Preis eingeben.");return}
+ if(!store[date.value])store[date.value]=[];
+ store[date.value].push({id:Date.now()+Math.random(),person:person.value,article:a,price:p,paid:false});
+ save(); article.value="";price.value="";article.focus();render();
+}
+$("add").onclick=add;
+[article,price].forEach(x=>x.addEventListener("keydown",e=>{if(e.key==="Enter")add()}));
+date.onchange=render;
+$("range").onchange=render;
+
+function removeItem(id){
+ store[date.value]=(store[date.value]||[]).filter(x=>x.id!==id); save();render();
+}
+function togglePaid(id){
+ const x=(store[date.value]||[]).find(x=>x.id===id);if(x)x.paid=!x.paid;save();render();
+}
+function render(){
+ const isWeek=$("range").value==="week";
+ let dates=isWeek?weekDates(date.value):[date.value];
+ let all=dates.flatMap(d=>(store[d]||[]).map(x=>({...x,date:d})));
+ let total=all.reduce((s,x)=>s+x.price,0);
+ $("total").textContent=money(total);
+ $("sub").textContent=isWeek?`${dates.length} Tage · ${all.length} Einträge`:`${all.length} Einträge`;
+ let sums={};PEOPLE.forEach(p=>sums[p]=0);all.forEach(x=>sums[x.person]+=x.price);
+ $("totals").innerHTML=PEOPLE.map(p=>`<div class="person"><span>${p}</span><strong>${money(sums[p])}</strong></div>`).join("");
+ const entries=$("entries");
+ if(!all.length)entries.innerHTML='<div class="empty">Noch keine Einträge.</div>';
+ else entries.innerHTML=all.slice().reverse().map(x=>`<div class="item">
+  <div><b>${esc(x.person)}</b> ${x.paid?'<span class="badge">Bezahlt</span>':''}<br><span class="small">${esc(x.article)}${isWeek?' · '+x.date:''}</span></div>
+  <div><div class="price">${money(x.price)}</div><div class="actions"><button class="secondary" onclick="togglePaid(${x.id})">${x.paid?'Offen':'Bezahlt'}</button><button class="danger" onclick="removeByDate('${x.date}',${x.id})">×</button></div></div>
+ </div>`).join("");
+}
+function removeByDate(d,id){store[d]=(store[d]||[]).filter(x=>x.id!==id);save();render()}
+function weekDates(s){
+ const d=new Date(s+"T12:00:00"), day=d.getDay()||7; d.setDate(d.getDate()-day+1);
+ return Array.from({length:7},(_,i)=>{let z=new Date(d);z.setDate(d.getDate()+i);return z.toLocaleDateString("sv-SE")})
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+
+function renderDays(){
+ const keys=Object.keys(store).sort().reverse();
+ $("days").innerHTML=keys.length?keys.map(d=>{
+  const a=store[d],t=a.reduce((s,x)=>s+x.price,0),paid=a.filter(x=>x.paid).length;
+  return `<div class="person"><span><b>${d.split("-").reverse().join(".")}</b><br><span class="small">${a.length} Einträge · ${paid}/${a.length} bezahlt</span></span><strong>${money(t)}</strong></div>`
+ }).join(""):'<div class="empty">Noch keine vergangenen Tage.</div>';
+}
+function renderNames(){$("names").innerHTML=PEOPLE.map(p=>`<div class="person"><span>${p}</span></div>`).join("")}
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{
+ document.querySelectorAll("main>section").forEach(s=>s.classList.add("hidden"));
+ $(b.dataset.tab).classList.remove("hidden");
+ document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));b.classList.add("active");
+ if(b.dataset.tab==="history")renderDays(); if(b.dataset.tab==="settings")renderNames();
+});
+$("reset").onclick=()=>{if(confirm("Wirklich alle Jausen-Daten löschen?")){store={};save();render();renderDays()}};
+$("export").onclick=()=>{
+ const blob=new Blob([JSON.stringify(store,null,2)],{type:"application/json"}),a=document.createElement("a");
+ a.href=URL.createObjectURL(blob);a.download="jause-backup.json";a.click();URL.revokeObjectURL(a.href);
+};
+render();
+</script>
+</body></html>
